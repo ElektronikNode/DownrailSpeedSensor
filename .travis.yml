@@ -1,12 +1,14 @@
-sudo: false
+sudo: true
+dist: trusty
 
 # Dependencies required for build
 addons:
   apt:
     packages:
-      - p7zip
+      - p7zip-full
       - gcc-arm-none-eabi
       - binutils-arm-none-eabi
+      - libnewlib-arm-none-eabi
   
 # Enable C++ support
 language: cpp
