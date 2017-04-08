@@ -1,4 +1,4 @@
-sudo: true
+sudo: false
 dist: trusty
 
 # Dependencies required for build
