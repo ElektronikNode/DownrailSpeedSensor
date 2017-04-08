@@ -1,0 +1,30 @@
+sudo: false
+
+# Dependencies required for build
+addons:
+  apt:
+    packages:
+      - p7zip
+      - gcc-arm-none-eabi
+      - binutils-arm-none-eabi
+  
+# Enable C++ support
+language: cpp
+
+# Compiler selection
+compiler:
+  - gcc
+
+# Some enviroment variables
+env:
+  global:
+    - CHIBIOS=./lib/ChibiOS
+
+# Install 
+install:
+  - git submodule update --init  # clone submodules
+  - ( cd $CHIBIOS/ext ; 7z x fatfs-0.12b-patched.7z ) # unzip dependency
+
+# Build steps
+script:
+  - make all
