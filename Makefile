@@ -208,7 +208,7 @@ UDEFS =
 UADEFS =
 
 # List all user directories here
-UINCDIR = ./src
+UINCDIR =
 
 # List the user directory to look for the libraries here
 ULIBDIR =
