@@ -128,6 +128,7 @@ static FRESULT scan_files(BaseSequentialStream *chp, char *path) {
   char *fn;
 
   res = f_opendir(&dir, path);
+  chprintf(chp, "%s\r\n", path);
   if (res == FR_OK) {
     i = strlen(path);
     while (((res = f_readdir(&dir, &fno)) == FR_OK) && fno.fname[0]) {
@@ -148,6 +149,37 @@ static FRESULT scan_files(BaseSequentialStream *chp, char *path) {
     }
   }
   return res;
+}
+
+static FRESULT stat_file(BaseSequentialStream *chp, char *path) {
+	FRESULT res;
+	FILINFO fno;
+
+	res = f_stat(path, &fno);
+	switch (res) {
+
+	case FR_OK:
+		chprintf(chp, "Size: %lu\n", fno.fsize);
+		chprintf(chp, "Timestamp: %u/%02u/%02u, %02u:%02u\n",
+			   (fno.fdate >> 9) + 1980, fno.fdate >> 5 & 15, fno.fdate & 31,
+			   fno.ftime >> 11, fno.ftime >> 5 & 63);
+		chprintf(chp, "Attributes: %c%c%c%c%c\n",
+			   (fno.fattrib & AM_DIR) ? 'D' : '-',
+			   (fno.fattrib & AM_RDO) ? 'R' : '-',
+			   (fno.fattrib & AM_HID) ? 'H' : '-',
+			   (fno.fattrib & AM_SYS) ? 'S' : '-',
+			   (fno.fattrib & AM_ARC) ? 'A' : '-');
+		break;
+
+	case FR_NO_FILE:
+		chprintf(chp, "File does not exist.\n");
+		break;
+
+	default:
+		chprintf(chp, "An error occured. (%d)\n", res);
+	}
+
+	return res;
 }
 
 /*===========================================================================*/
@@ -183,8 +215,79 @@ static void cmd_tree(BaseSequentialStream *chp, int argc, char *argv[]) {
   scan_files(chp, (char *)fbuff);
 }
 
+static void cmd_stat(BaseSequentialStream *chp, int argc, char *argv[]) {
+  (void)argv;
+  if (argc != 1) {
+    chprintf(chp, "Usage: stat <path>\r\n");
+    return;
+  }
+  if (!fs_ready) {
+    chprintf(chp, "File System not mounted\r\n");
+    return;
+  }
+  stat_file(chp, argv[0]);
+}
+
+static void cmd_mkdir(BaseSequentialStream *chp, int argc, char *argv[]) {
+  FRESULT res;
+
+  (void)argv;
+  if (argc != 1) {
+    chprintf(chp, "Usage: mkdir <path>\r\n");
+    return;
+  }
+  if (!fs_ready) {
+    chprintf(chp, "File System not mounted\r\n");
+    return;
+  }
+
+  res = f_mkdir(argv[0]);
+  if(res != FR_OK) {
+	  chprintf(chp, "An error occured. (%d)\n", res);
+  }
+}
+
+static void cmd_cat(BaseSequentialStream *chp, int argc, char *argv[]) {
+  FRESULT res;
+  FIL fil;       /* File object */
+  char line[82]; /* Line buffer */
+  UINT br;
+
+  (void)argv;
+  if (argc != 1) {
+    chprintf(chp, "Usage: cat <path>\r\n");
+    return;
+  }
+  if (!fs_ready) {
+    chprintf(chp, "File System not mounted\r\n");
+    return;
+  }
+
+  /* Open a text file */
+  res = f_open(&fil, argv[0], FA_READ);
+  if (res != FR_OK) {
+	  chprintf(chp, "Could not open file\r\n");
+	  return;
+  }
+
+  /* Read all lines and display it */
+  while (f_read(&fil, line, (sizeof line) - 1, &br) == FR_OK) {
+	  if(br == 0) {
+		  break;
+	  }
+	  line[br] = 0;
+	  chprintf(chp, line);
+  }
+
+  /* Close the file */
+  f_close(&fil);
+}
+
 static const ShellCommand commands[] = {
   {"tree", cmd_tree},
+  {"stat", cmd_stat},
+  {"mkdir", cmd_mkdir},
+  {"cat", cmd_cat},
   {NULL, NULL}
 };
 
@@ -257,7 +360,7 @@ static THD_FUNCTION(Thread1, arg) {
     if (fs_ready)
       chThdSleepMilliseconds(200);
     else
-      chThdSleepMilliseconds(500);
+      chThdSleepMilliseconds(1000);
   }
 }
 
