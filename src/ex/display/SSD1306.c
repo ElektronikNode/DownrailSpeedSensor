@@ -16,34 +16,71 @@ const uint8_t __osc_freq = 0x08;
 const uint8_t __clk_div = 0x00;
 const uint8_t __mux_ratio = 0x3F;
 
- // Fundamental commands
-const uint8_t __entire_display_on = 0xa4;
-const uint8_t __normal_display = 0xa6;
-
 const uint8_t __contrast = 0x8F;
 
-void ssd1306_init(void) {
-
+void ssd1306ObjectInit(SSD1306Driver *devp) {
+	devp->config = NULL;
 }
 
-void ssd1306_startup(I2CDriver *i2cp) {
-//	send_command(0xA4);
-//	send_command_data(0xD5, __osc_freq << 4 | __clk_div);
-//	send_command_data(0xA8, __mux_ratio);
-//	send_command_data(0xd3, 0x00);
-//	send_command_data(0x8d, 0x14);
-//	send_command(0x40);
-//	send_command(0xa6);
-//	send_command(0xa4);
-//	send_command(0xa1);
-//	send_command(0xc8);
-//	// Horizontal mode
-//	send_command(0x20);
-//	send_command(0x00);
-//
-//	send_command_data(0xda, 0x12);
-//	send_command_data(0x81, __contrast);
-//	send_command_data(0xd9, 0xf1);
-//	send_command_data(0xdb, 0x40);
-//	send_command(0xaf);
+void ssd1306Start(SSD1306Driver *devp, SSD1306Config *config) {
+	devp->config = config;
+
+	// for more informations look at Page 64 of the datasheet
+	ssd1306SendCommand(devp, SSD1306_COMMAND_ENTIRE_DISPLAY_ON);
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_DISPLAY_CLOCK, __osc_freq << 4 | __clk_div);
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_MULTIPLEX_RATIO, __mux_ratio);
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_DISPLAY_OFFSET, 0x00);
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_CHARGE_PUMP, 0x14); // Enable Charge Pump
+	ssd1306SendCommand(devp, 0x40); // Set Display Start Line
+	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_NORMAL_DISPLAY);
+	ssd1306SendCommand(devp, SSD1306_COMMAND_ENTIRE_DISPLAY_ON);
+	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_SEGMENT_REMAP_127);
+	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_COM_OUTPUT_SCAN_DIR_TD);
+
+	// Horizontal mode
+	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_MEMORY_HORIZONTAL);
+	ssd1306SendCommand(devp, 0x00); // Set Lower Column Start Address
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_COM_PINS, 0x12);
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_CONTRAST_CONTROL, __contrast);
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_PRECHARGE_PERIOD, 0xf1);
+	ssd1306SendCommandData(devp, SSD1306_COMMAND_SET_VCOMH_LEVEL, 0x40);
+	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_DISPLAY_ON);
+}
+
+msg_t ssd1306SendCommand(SSD1306Driver *devp, ssd1306_command command) {
+	uint8_t txbuf[2] = {0x80, command};
+	msg_t res;
+
+	i2cAcquireBus((devp)->config->i2cp);
+	i2cStart((devp)->config->i2cp, (devp)->config->i2ccfg);
+
+	res = i2cMasterTransmitTimeout(devp->config->i2cp,
+			devp->config->slaveaddress,
+			txbuf, 2,
+			NULL, 0,
+			1000 //TIME_INFINITE
+	);
+
+	i2cReleaseBus((devp)->config->i2cp);
+
+	return res;
+}
+
+msg_t ssd1306SendCommandData(SSD1306Driver *devp, ssd1306_command command, uint8_t data) {
+	uint8_t txbuf[4] = {0x80, command, 0x80, data};
+	msg_t res;
+
+	i2cAcquireBus((devp)->config->i2cp);
+	i2cStart((devp)->config->i2cp, (devp)->config->i2ccfg);
+
+	res = i2cMasterTransmitTimeout(devp->config->i2cp,
+			devp->config->slaveaddress,
+			txbuf, 4,
+			NULL, 0,
+			1000 //TIME_INFINITE
+	);
+
+	i2cReleaseBus((devp)->config->i2cp);
+
+	return res;
 }
