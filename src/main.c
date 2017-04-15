@@ -23,6 +23,8 @@
 #include "chprintf.h"
 #include "shell.h"
 
+#include "usbcfg.h"
+
 #include "ff.h"
 
 /*===========================================================================*/
@@ -292,7 +294,7 @@ static const ShellCommand commands[] = {
 };
 
 static const ShellConfig shell_cfg1 = {
-  (BaseSequentialStream *)&SD2,
+  (BaseSequentialStream *)&SDU1,
   commands
 };
 
@@ -392,6 +394,22 @@ int main(void) {
   sdStart(&SD2, NULL);
 
   /*
+     * Initializes a serial-over-USB CDC driver.
+     */
+  sduObjectInit(&SDU1);
+  sduStart(&SDU1, &serusbcfg);
+
+  /*
+  * Activates the USB driver and then the USB bus pull-up on D+.
+  * Note, a delay is inserted in order to not have to disconnect the cable
+  * after a reset.
+  */
+  usbDisconnectBus(serusbcfg.usbp);
+  chThdSleepMilliseconds(1500);
+  usbStart(serusbcfg.usbp, &usbcfg);
+  usbConnectBus(serusbcfg.usbp);
+
+  /*
    * Shell manager initialization.
    */
   shellInit();
@@ -421,6 +439,17 @@ int main(void) {
   chEvtRegister(&inserted_event, &el0, 0);
   chEvtRegister(&removed_event, &el1, 1);
   chEvtRegister(&shell_terminated, &el2, 2);
+
+  while (true) {
+      if (SDU1.config->usbp->state == USB_ACTIVE) {
+        shelltp = chThdCreateFromHeap(NULL, SHELL_WA_SIZE,
+                                                "shell", NORMALPRIO + 1,
+                                                shellThread, (void *)&shell_cfg1);
+        chThdWait(shelltp);               /* Waiting termination.             */
+      }
+      chThdSleepMilliseconds(1000);
+  }
+
   while (true) {
     if (!shelltp) {
       shelltp = chThdCreateFromHeap(NULL, SHELL_WA_SIZE,
