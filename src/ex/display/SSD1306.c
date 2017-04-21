@@ -8,6 +8,8 @@
 
 #include "SSD1306.h"
 
+#include <string.h>
+
 #define COMMAND 0x80
 #define DATA 0x40
 

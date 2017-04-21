@@ -60,6 +60,8 @@ extern "C" {
 
 	void FramebufferSWDrawPixel(FramebufferSW *fb, int x, int y);
 
+	void FramebufferSWDrawLine(FramebufferSW *fb, int x1, int y1, int x2, int y2);
+
 #ifdef __cplusplus
 }
 #endif

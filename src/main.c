@@ -311,7 +311,12 @@ static void cmd_i2c(BaseSequentialStream *chp, int argc, char *argv[]) {
 
 	FramebufferSWSetColor(&fb, COLOR_SW_WHITE);
 
-	FramebufferSWDrawPixel(&fb, 10, 10);
+	FramebufferSWDrawPixel(&fb, 0, 0);
+	FramebufferSWDrawPixel(&fb, 0, 63);
+	FramebufferSWDrawPixel(&fb, 127, 0);
+	FramebufferSWDrawPixel(&fb, 127, 63);
+
+	FramebufferSWDrawLine(&fb, 10, 10, 117, 53);
 
 	ssd1306Update(&SSD1306D1);
 }
@@ -458,6 +463,8 @@ int main(void) {
    * Creates the blinker thread.
    */
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL);
+
+  cmd_i2c(NULL, 0, NULL); // TODO: remove later
 
   /*
    * Normal main() thread activity, handling SD card events and shell

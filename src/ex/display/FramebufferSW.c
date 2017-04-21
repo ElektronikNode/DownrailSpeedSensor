@@ -6,7 +6,9 @@
  */
 
 #include "FramebufferSW.h"
+
 #include <string.h>
+#include <stdlib.h>
 
 static uint8_t _framebuffer[1024]; // TODO: do not use fixed size and create one framebuffer per object
 
