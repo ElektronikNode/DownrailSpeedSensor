@@ -106,7 +106,7 @@ void FramebufferSWPrintText(FramebufferSW *fb, uint8_t row, char *text) {
     }
 }
 
-void FramebufferSWPrintSMChar(FramebufferSW *fb, char x, char y, unsigned char ch, bool scr)
+void FramebufferSWPrintSMChar(FramebufferSW *fb, char x, char y, char ch, bool scr)
 {
     unsigned int index = 0;
     unsigned int i = 0;
@@ -135,11 +135,11 @@ void FramebufferSWPrintSMChar(FramebufferSW *fb, char x, char y, unsigned char c
     }
 }
 
-void FramebufferSWPrintSMText(FramebufferSW *fb, unsigned char row, const unsigned char *dataPtr, bool scr) {   //print small font text, input is row on LCD, text to print, should the text be scrollable(0/1)
+void FramebufferSWPrintSMText(FramebufferSW *fb, unsigned char row, const char *dataPtr, bool scr) {   //print small font text, input is row on LCD, text to print, should the text be scrollable(0/1)
   unsigned char x = 1;         // variable for X coordinate
 
   if (row < 0) row = 0;
-  if (row <= ((int)fb->y_res/8 - 1)) {
+  if (row <= ((int)fb->y_res/8)) {
     while (*dataPtr) {           // loop to the end of string
     	FramebufferSWPrintSMChar(fb, x, row, *dataPtr, scr);
       if (!scr) {

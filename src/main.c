@@ -310,18 +310,24 @@ static void cmd_cat(BaseSequentialStream *chp, int argc, char *argv[]) {
 static void cmd_i2c(BaseSequentialStream *chp, int argc, char *argv[]) {
 	FramebufferSWClear(&fb);
 
-	FramebufferSWSetColor(&fb, COLOR_SW_WHITE);
+		FramebufferSWSetColor(&fb, COLOR_SW_WHITE);
 
-	FramebufferSWDrawPixel(&fb, 0, 0);
-	FramebufferSWDrawPixel(&fb, 0, 63);
-	FramebufferSWDrawPixel(&fb, 127, 0);
-	FramebufferSWDrawPixel(&fb, 127, 63);
+		//FramebufferSWDrawPixel(&fb, 0, 0);
+		//FramebufferSWDrawPixel(&fb, 0, 63);
+		//FramebufferSWDrawPixel(&fb, 127, 0);
+		//FramebufferSWDrawPixel(&fb, 127, 63);
 
-	FramebufferSWPrintText(&fb, 1, "Title");
+		FramebufferSWPrintText(&fb, 0, "Title");
 
-	FramebufferSWPrintSMText(&fb, 5, "text", false);
+		FramebufferSWPrintSMText(&fb, 5, "text", false);
 
-	ssd1306Update(&SSD1306D1);
+		if (fs_ready) {
+			FramebufferSWPrintSMText(&fb, 7, "[X] SD", false);
+		} else {
+			FramebufferSWPrintSMText(&fb, 7, "[ ] SD", false);
+		}
+
+		ssd1306Update(&SSD1306D1);
 }
 
 static const ShellCommand commands[] = {
@@ -342,8 +348,14 @@ static const ShellConfig shell_cfg1 = {
 /* Main and generic code.                                                    */
 /*===========================================================================*/
 
+#define NUM_SPEED_BUFFER 128
+
+float speedMeasurements[NUM_SPEED_BUFFER] = {0.0};
+size_t curSpeedPos = 0;
+
 static thread_t *shelltp = NULL;
 MMCDriver MMCD1;
+
 
 /*
  * Card insertion event.
@@ -403,8 +415,75 @@ static THD_FUNCTION(Thread1, arg) {
       chThdSleepMilliseconds(200);
     else
       chThdSleepMilliseconds(1000);
+
+    float curSpeed = speedMeasurements[curSpeedPos] + 0.5;
+
+    curSpeedPos ++;
+    if(curSpeedPos >= NUM_SPEED_BUFFER) {
+    	curSpeedPos = 0;
+    }
+
+    speedMeasurements[curSpeedPos] = curSpeed;
   }
 }
+
+
+/*
+ * Display thread.
+ */
+static THD_WORKING_AREA(waThread2, 2048);
+static THD_FUNCTION(Thread2, arg) {
+  (void)arg;
+
+  chRegSetThreadName("display");
+   while (TRUE) {
+	  	FramebufferSWClear(&fb);
+
+		FramebufferSWSetColor(&fb, COLOR_SW_WHITE);
+
+		char *speedText[20];
+
+		float curSpeed = speedMeasurements[curSpeedPos];
+
+		chsnprintf(speedText, 20, "%d.%d kmh", (int)curSpeed, (int)((curSpeed-(int)curSpeed)*10));
+
+		FramebufferSWPrintText(&fb, 0, speedText);
+
+		FramebufferSWDrawLine(&fb, 0, 52, 127, 52);
+		FramebufferSWDrawLine(&fb, 0, 52-32, 127, 52-32);
+
+		FramebufferSWDrawLine(&fb, curSpeedPos, 52-4, curSpeedPos, 52);
+
+		FramebufferSWDrawLine(&fb, curSpeedPos, 52-32, curSpeedPos, 52-28);
+
+		float max = 0.0;
+
+		for(size_t i = 0; i < NUM_SPEED_BUFFER; i++) {
+			if(speedMeasurements[i] > max) {
+				max = speedMeasurements[i];
+			}
+		}
+
+		float multiplier = (32. / (max + 8-((int)max % 8)));
+
+		for(size_t i = 0; i < NUM_SPEED_BUFFER; i++) {
+			FramebufferSWDrawPixel(&fb, i, 52-(int)(speedMeasurements[i]*multiplier));
+		}
+
+		FramebufferSWDrawLine(&fb, 40, 52, 40, 63);
+
+		if (fs_ready) {
+			FramebufferSWPrintSMText(&fb, 8, "[X] SD", false);
+		} else {
+			FramebufferSWPrintSMText(&fb, 8, "[ ] SD", false);
+		}
+
+		ssd1306Update(&SSD1306D1);
+
+		chThdSleepMilliseconds(200);
+   }
+}
+
 
 /*
  * Application entry point.
@@ -467,7 +546,10 @@ int main(void) {
    */
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL);
 
-  cmd_i2c(NULL, 0, NULL); // TODO: remove later
+  /*
+   * Creates the display thread.
+   */
+  chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO, Thread2, NULL);
 
   /*
    * Normal main() thread activity, handling SD card events and shell
