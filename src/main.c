@@ -31,14 +31,7 @@
 /* OLED Display                                                              */
 /*===========================================================================*/
 
-#define LCD_X_RES 128
-#define LCD_Y_RES 64
-
-#define BUFFER_SIZE ((LCD_X_RES * LCD_Y_RES) / 8)
-
-static uint8_t fb_array[BUFFER_SIZE];
-
-static FramebufferSW fb = {LCD_X_RES, LCD_Y_RES, BUFFER_SIZE, fb_array, 0};
+static FramebufferSW fb;
 
 static const I2CConfig i2ccfg = {
 		OPMODE_I2C,
@@ -312,23 +305,15 @@ static void cmd_cat(BaseSequentialStream *chp, int argc, char *argv[]) {
   /* Close the file */
   f_close(&fil);
 }
-#include "osal.h"
+
 static void cmd_i2c(BaseSequentialStream *chp, int argc, char *argv[]) {
-	chprintf(chp, "send nop ...\r\n");
-    switch(ssd1306SendCommand(&SSD1306D1, SSD1306_COMMAND_NOP)) {
-    case MSG_OK:
-    	chprintf(chp, "OK\r\n");
-    	break;
-    case MSG_RESET:
-		chprintf(chp, "ERROR\r\n");
-		break;
-    case MSG_TIMEOUT:
-		chprintf(chp, "TIMEOUT\r\n");
-		break;
-    default:
-    	chprintf(chp, "UNKNOW\r\n");
-    	break;
-    }
+	FramebufferSWClear(&fb);
+
+	FramebufferSWSetColor(&fb, COLOR_SW_WHITE);
+
+	FramebufferSWDrawPixel(&fb, 10, 10);
+
+	ssd1306Update(&SSD1306D1);
 }
 
 static const ShellCommand commands[] = {
@@ -458,6 +443,8 @@ int main(void) {
    */
   palSetPadMode(GPIOB, 6, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SCL */
   palSetPadMode(GPIOB, 7, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SDA */
+
+  FramebufferSWObjectInit(&fb, 128, 64);
 
   ssd1306ObjectInit(&SSD1306D1);
   ssd1306Start(&SSD1306D1, &ssd1306cfg);

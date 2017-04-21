@@ -47,6 +47,41 @@ void ssd1306Start(SSD1306Driver *devp, SSD1306Config *config) {
 	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_DISPLAY_ON);
 }
 
+void set_page_address(SSD1306Driver *devp)  {
+	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_MEMORY_PAGE);
+	ssd1306SendCommand(devp, 0x00);
+	ssd1306SendCommand(devp, 7);
+}
+
+void set_column_address(SSD1306Driver *devp) {
+	ssd1306SendCommand(devp, SSD1306_COMMAND_SET_MEMORY_VERTICAL);
+	ssd1306SendCommand(devp, 0x00);
+	ssd1306SendCommand(devp, 127);
+}
+
+void ssd1306Update(SSD1306Driver *devp) {
+	set_column_address(devp);
+	set_page_address(devp);
+
+	for(int j = 0; j < 64; j++) {
+		uint8_t data[17];
+		data[0] = DATA;
+		memcpy(&data[1], &(devp)->config->fb->fb[16*j], 16 * sizeof(uint8_t));
+
+		i2cAcquireBus((devp)->config->i2cp);
+		i2cStart((devp)->config->i2cp, (devp)->config->i2ccfg);
+
+		i2cMasterTransmitTimeout(devp->config->i2cp,
+				devp->config->slaveaddress,
+				data, 17,
+				NULL, 0,
+				1000 //TIME_INFINITE
+		);
+
+		i2cReleaseBus((devp)->config->i2cp);
+	}
+}
+
 msg_t ssd1306SendCommand(SSD1306Driver *devp, ssd1306_command command) {
 	uint8_t txbuf[2] = {0x80, command};
 	msg_t res;

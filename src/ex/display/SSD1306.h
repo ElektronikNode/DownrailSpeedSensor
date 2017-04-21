@@ -11,34 +11,7 @@
 #include "hal.h"
 #include "hal_i2c.h"
 
-typedef uint8_t framebuffer_sw_color;
-
-typedef struct {
-	/*
-	 * @brief Width of Frame
-	 */
-	const uint16_t x_res; // = 128;
-
-	/*
-	 * @brief Height of Frame
-	 */
-	const uint16_t y_res; // = 64;
-
-	/*
-	 * @brief size of Frame Buffer
-	 */
-	const uint16_t buffer_size; // = (x_res * y_res) / (sizeof uint8_t);
-
-	/*
-	 * @brief Frame Buffer which is used to store the pixel data
-	 */
-	uint8_t *fb;
-
-	/*
-	 * @brief Pixel color which is used for drawing event
-	 */
-	framebuffer_sw_color pixel_color;
-} FramebufferSW;
+#include "FramebufferSW.h"
 
 
 #if !HAL_USE_I2C
@@ -164,6 +137,8 @@ extern "C" {
 
 	void ssd1306ObjectInit(SSD1306Driver *devp);
 	void ssd1306Start(SSD1306Driver *devp, SSD1306Config *config);
+
+	void ssd1306Update(SSD1306Driver *devp);
 
 	msg_t ssd1306SendCommand(SSD1306Driver *devp, ssd1306_command command);
 	msg_t ssd1306SendCommandData(SSD1306Driver *devp, ssd1306_command command, uint8_t data);
