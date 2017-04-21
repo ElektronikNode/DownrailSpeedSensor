@@ -6,6 +6,7 @@
  */
 
 #include "FramebufferSW.h"
+#include "fonts.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -31,12 +32,9 @@ void FramebufferSWSetColor(FramebufferSW *fb, colorsw_t color) {
 void FramebufferSWDrawPixel(FramebufferSW *fb, int x, int y) {
 	size_t index;
 
-	// TODO: start with 0|0 or 1|1
-
 	// check for out off range
-	if (x >= (int)fb->x_res || x < 0 || y >= (int)fb->y_res || y < 0) {
-		return;
-	}
+	if ((x > (int)fb->x_res)||(x < 0)) return;
+	if ((y > (int)fb->y_res)||(y < 0)) return;
 
 	index = (size_t)x + ((size_t)(y / 8)) * fb->x_res;
 
@@ -71,4 +69,88 @@ void FramebufferSWDrawLine(FramebufferSW *fb, int x1, int y1, int x2, int y2) {
       }
    } while (1);
    return;
+}
+
+void FramebufferSWPrintText(FramebufferSW *fb, uint8_t row, char *text) {
+
+    uint8_t offset = 0;
+    int counter = 0;
+
+    if (row < 0) return;
+
+    if (row <= ((int)fb->y_res/16 - 1)) {
+      while(*text != 0) {
+        if (counter < 8) {
+          uint16_t data[16];
+          uint16_t temp[16];
+          for(int i = 0; i < 16; i++) {
+              temp[i] = (uint8_t)font_16x16[*text - 32][i*2] << 8 | (uint8_t)font_16x16[*text - 32][i*2 +1];
+          }
+
+          for(int i = 0; i < 16; i++) {
+              data[i] = 0;
+              for(int j = 0; j < 16; j++) {
+                  data[i] |= !!(temp[j] & (1 << 15-i)) << j;
+              }
+          }
+          for(int i = 0; i < 16; i++) {
+        	  fb->fb[(row*2 * (int)fb->x_res) + i + offset] = data[i] & 0xFF;
+        	  fb->fb[((row*2 + 1) * (int)fb->x_res) + i + offset] = data[i] >> 8;
+
+          }
+          counter++;
+        }
+        offset += 16;
+        text++;
+      }
+    }
+}
+
+void FramebufferSWPrintSMChar(FramebufferSW *fb, char x, char y, unsigned char ch, bool scr)
+{
+    unsigned int index = 0;
+    unsigned int i = 0;
+    x -= 1;
+    y -= 1; // TODO
+
+    // check for out off range
+    if ((x > (int)fb->x_res)||(x < 0)) return;
+    if ((y > (int)fb->y_res)||(y < 0)) return;
+
+    if (!scr) {
+      if (x * 6 > ((int)fb->x_res - 6)) {
+        x = 0;
+        y += 1;
+      }
+    }
+
+    index = (unsigned int) x * 6  + (unsigned int) y * (int)fb->x_res;
+
+    for (i = 0; i < 6; i++)
+    {
+        if (i==5)
+        	fb->fb[index++] = 0x00;
+        else
+        	fb->fb[index++] = font_6x8[ch - 32][i];
+    }
+}
+
+void FramebufferSWPrintSMText(FramebufferSW *fb, unsigned char row, const unsigned char *dataPtr, bool scr) {   //print small font text, input is row on LCD, text to print, should the text be scrollable(0/1)
+  unsigned char x = 1;         // variable for X coordinate
+
+  if (row < 0) row = 0;
+  if (row <= ((int)fb->y_res/8 - 1)) {
+    while (*dataPtr) {           // loop to the end of string
+    	FramebufferSWPrintSMChar(fb, x, row, *dataPtr, scr);
+      if (!scr) {
+        if (x * 6 > ((int)fb->x_res - 6)) {
+          x = 0;
+          row += 1;
+        }
+      }
+      x++;
+      dataPtr++;
+    }
+  }
+  return;
 }

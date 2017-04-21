@@ -62,6 +62,12 @@ extern "C" {
 
 	void FramebufferSWDrawLine(FramebufferSW *fb, int x1, int y1, int x2, int y2);
 
+	void FramebufferSWPrintText(FramebufferSW *fb, uint8_t row, char *text);
+
+	void FramebufferSWPrintSMChar(FramebufferSW *fb, char x, char y, unsigned char ch, bool scr);
+
+	void FramebufferSWPrintSMText(FramebufferSW *fb, unsigned char row, const unsigned char *dataPtr, bool scr);
+
 #ifdef __cplusplus
 }
 #endif

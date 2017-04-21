@@ -306,6 +306,7 @@ static void cmd_cat(BaseSequentialStream *chp, int argc, char *argv[]) {
   f_close(&fil);
 }
 
+
 static void cmd_i2c(BaseSequentialStream *chp, int argc, char *argv[]) {
 	FramebufferSWClear(&fb);
 
@@ -316,7 +317,9 @@ static void cmd_i2c(BaseSequentialStream *chp, int argc, char *argv[]) {
 	FramebufferSWDrawPixel(&fb, 127, 0);
 	FramebufferSWDrawPixel(&fb, 127, 63);
 
-	FramebufferSWDrawLine(&fb, 10, 10, 117, 53);
+	FramebufferSWPrintText(&fb, 1, "Title");
+
+	FramebufferSWPrintSMText(&fb, 5, "text", false);
 
 	ssd1306Update(&SSD1306D1);
 }
