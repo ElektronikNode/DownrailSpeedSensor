@@ -349,9 +349,13 @@ static const ShellConfig shell_cfg1 = {
 /*===========================================================================*/
 
 #define NUM_SPEED_BUFFER 128
+#define MS_PER_INDEX 100
 
-float speedMeasurements[NUM_SPEED_BUFFER] = {0.0};
-size_t curSpeedPos = 0;
+volatile float speedMeasurements[NUM_SPEED_BUFFER] = {0.0};
+volatile size_t curSpeedPos = 0;
+volatile uint16_t impulses[NUM_SPEED_BUFFER] = {0};
+float m_per_impulse = 0.5;
+volatile char* fs_stat[50] = {0};
 
 static thread_t *shelltp = NULL;
 MMCDriver MMCD1;
@@ -401,29 +405,24 @@ static void ShellHandler(eventid_t id) {
 }
 
 /*
- * Blinker thread.
+ * speed thread.
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(Thread1, arg) {
 
   (void)arg;
 
-  chRegSetThreadName("blinker");
+  chRegSetThreadName("speed_update");
   while (TRUE) {
-    palTogglePad(IOPORT3, GPIOC_LED);
-    if (fs_ready)
-      chThdSleepMilliseconds(200);
-    else
-      chThdSleepMilliseconds(1000);
+    chThdSleepMilliseconds(MS_PER_INDEX);
 
-    float curSpeed = speedMeasurements[curSpeedPos] + 0.5;
+    size_t nextPos = (curSpeedPos + 1) % NUM_SPEED_BUFFER;
 
-    curSpeedPos ++;
-    if(curSpeedPos >= NUM_SPEED_BUFFER) {
-    	curSpeedPos = 0;
-    }
+    speedMeasurements[nextPos] = impulses[nextPos] * m_per_impulse * 1000. / MS_PER_INDEX * 3.6;
 
-    speedMeasurements[curSpeedPos] = curSpeed;
+    impulses[(nextPos + 1) % NUM_SPEED_BUFFER] = 0;
+
+    curSpeedPos = nextPos;
   }
 }
 
@@ -470,12 +469,14 @@ static THD_FUNCTION(Thread2, arg) {
 			FramebufferSWDrawPixel(&fb, i, 52-(int)(speedMeasurements[i]*multiplier));
 		}
 
-		FramebufferSWDrawLine(&fb, 40, 52, 40, 63);
+		//FramebufferSWDrawLine(&fb, 40, 52, 40, 63);
+
+		FramebufferSWPrintSMText(&fb, 8, fs_stat, false);
 
 		if (fs_ready) {
-			FramebufferSWPrintSMText(&fb, 8, "[X] SD", false);
+			//FramebufferSWPrintSMText(&fb, 8, "[X] SD", false);
 		} else {
-			FramebufferSWPrintSMText(&fb, 8, "[ ] SD", false);
+			//FramebufferSWPrintSMText(&fb, 8, "[ ] SD", false);
 		}
 
 		ssd1306Update(&SSD1306D1);
@@ -483,6 +484,101 @@ static THD_FUNCTION(Thread2, arg) {
 		chThdSleepMilliseconds(200);
    }
 }
+
+#define FS_DIR "DRC"
+
+/*
+ * filesystem thread.
+ */
+static THD_WORKING_AREA(waThread3, 2048);
+static THD_FUNCTION(Thread3, arg) {
+  (void)arg;
+  FRESULT res;
+  static FIL fil;       /* File object */
+  static bool fileValid = false;
+  static bool wasReady = false;
+  static int lastPos = 0;
+  static int index = 0;
+
+  UINT bw;
+
+  char* buffer[50];
+
+  chRegSetThreadName("fs");
+  while (TRUE) {
+    chThdSleepMilliseconds(1000);
+    if (!fs_ready) {
+    	strcpy(fs_stat, "waiting for SD card");
+    	wasReady = false;
+    	fileValid = false;
+    	continue; // we cannot do anything without a filesystem
+    }
+
+    if(!wasReady) {
+    	f_mkdir(FS_DIR); // try to create dir
+    	wasReady = true;
+    	fileValid = false;
+    }
+
+    if(!fileValid) {
+      /* Open a text file */
+      chsnprintf(buffer, 50, "/%s/speed_%d.csv", FS_DIR, 1);
+      strcpy(fs_stat, buffer);
+	  res = f_open(&fil, buffer, FA_WRITE | FA_OPEN_APPEND);
+	  if (res != FR_OK) {
+		  continue;
+	  }
+	  strcpy(buffer, "time;id;ticks;speed\r\n");
+	  f_write(&fil, buffer, strlen(buffer), &bw);
+	  f_sync(&fil);
+	  fileValid = true;
+	  index = 0;
+    }
+
+    while(lastPos < curSpeedPos || (lastPos > curSpeedPos && curSpeedPos < 10)) {
+    	float curSpeed = speedMeasurements[lastPos];
+    	chsnprintf(buffer, 50, "%l;%d;%d;%d.%d\r\n", (long)index * MS_PER_INDEX, lastPos, impulses[lastPos], (int)curSpeed, (int)((curSpeed-(int)curSpeed)*10));
+
+    	f_write(&fil, buffer, strlen(buffer), &bw);
+    	lastPos = (lastPos + 1) % NUM_SPEED_BUFFER;
+    	index ++;
+    }
+
+    f_sync(&fil);
+
+  }
+}
+
+/* Triggered when the button is pressed or released. The LED is set to ON.*/
+static void extcb1(EXTDriver *extp, expchannel_t channel) {
+
+  (void)extp;
+  (void)channel;
+
+  impulses[(curSpeedPos + 1) % NUM_SPEED_BUFFER] ++; // TODO: detect if correct edge
+  palTogglePad(IOPORT3, GPIOC_LED); // toggle led on impulse
+}
+
+static const EXTConfig extcfg = {
+  {
+    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, extcb1},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+	{EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL}
+  }
+};
 
 
 /*
@@ -505,6 +601,12 @@ int main(void) {
    */
   halInit();
   chSysInit();
+
+  /*
+   * Activates the EXT driver 1.
+   */
+  extStart(&EXTD1, &extcfg);
+  extChannelEnable(&EXTD1, 0);
 
   /*
    * Activates the serial driver 1 using the driver default configuration.
@@ -542,7 +644,7 @@ int main(void) {
   tmr_init(&MMCD1);
 
   /*
-   * Creates the blinker thread.
+   * Creates the speed update thread.
    */
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL);
 
@@ -550,6 +652,11 @@ int main(void) {
    * Creates the display thread.
    */
   chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO, Thread2, NULL);
+
+  /*
+   * Creates the filesystem thread.
+   */
+  chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO-1, Thread3, NULL);
 
   /*
    * Normal main() thread activity, handling SD card events and shell
