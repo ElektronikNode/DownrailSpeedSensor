@@ -349,7 +349,7 @@ static const ShellConfig shell_cfg1 = {
 /*===========================================================================*/
 
 #define NUM_SPEED_BUFFER 128
-#define MS_PER_INDEX 100
+#define MS_PER_INDEX 1000
 
 volatile float speedMeasurements[NUM_SPEED_BUFFER] = {0.0};
 volatile size_t curSpeedPos = 0;
@@ -490,15 +490,17 @@ static THD_FUNCTION(Thread2, arg) {
 /*
  * filesystem thread.
  */
-static THD_WORKING_AREA(waThread3, 2048);
+static THD_WORKING_AREA(waThread3, 4096);
 static THD_FUNCTION(Thread3, arg) {
   (void)arg;
   FRESULT res;
   static FIL fil;       /* File object */
+  DIR dir;
   static bool fileValid = false;
   static bool wasReady = false;
   static int lastPos = 0;
   static int index = 0;
+  static FILINFO fno;
 
   UINT bw;
 
@@ -522,13 +524,22 @@ static THD_FUNCTION(Thread3, arg) {
 
     if(!fileValid) {
       /* Open a text file */
-      chsnprintf(buffer, 50, "/%s/speed_%d.csv", FS_DIR, 1);
+      int file_index = 0;
+      res = f_opendir(&dir, FS_DIR);                       /* Open the directory */
+      if (res == FR_OK) {
+    	  while(true) {
+			  res = f_readdir(&dir, &fno);                   /* Read a directory item */
+			  if (res != FR_OK || fno.fname[0] == 0) break;  /* Break on error or end of dir */
+			  file_index ++; // next index
+		  }
+      }
+      chsnprintf(buffer, 50, "/%s/speed_%d.csv", FS_DIR, file_index);
       strcpy(fs_stat, buffer);
 	  res = f_open(&fil, buffer, FA_WRITE | FA_OPEN_APPEND);
 	  if (res != FR_OK) {
 		  continue;
 	  }
-	  strcpy(buffer, "time;id;ticks;speed\r\n");
+	  strcpy(buffer, "time[ms];id;ticks;speed\r\n");
 	  f_write(&fil, buffer, strlen(buffer), &bw);
 	  f_sync(&fil);
 	  fileValid = true;
@@ -537,7 +548,11 @@ static THD_FUNCTION(Thread3, arg) {
 
     while(lastPos < curSpeedPos || (lastPos > curSpeedPos && curSpeedPos < 10)) {
     	float curSpeed = speedMeasurements[lastPos];
-    	chsnprintf(buffer, 50, "%l;%d;%d;%d.%d\r\n", (long)index * MS_PER_INDEX, lastPos, impulses[lastPos], (int)curSpeed, (int)((curSpeed-(int)curSpeed)*10));
+    	long time = (long)(index) * MS_PER_INDEX;
+    	int impls = impulses[lastPos];
+    	int speed_u = (int)curSpeed;
+    	int speed_l = (int)((curSpeed-(int)curSpeed)*10);
+    	chsnprintf(buffer, 50, "%D;%d;%d;%d.%d\r\n", time, lastPos, impls, speed_u, speed_l);
 
     	f_write(&fil, buffer, strlen(buffer), &bw);
     	lastPos = (lastPos + 1) % NUM_SPEED_BUFFER;
